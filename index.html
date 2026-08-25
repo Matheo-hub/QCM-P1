@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>QCM Médecine P1</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="app-container">
+
+        <!-- ONGLET 1 : ACCUEIL / LANCEMENT RAPIDE -->
+        <section id="tab-home" class="tab-content">
+            <header class="top-nav">
+                <h1>Entraînement P1</h1>
+                <button class="theme-toggle nav-icon-btn">🌙</button>
+            </header>
+
+            <div class="card setup-card">
+                <label for="home-folder-select">Dossier / Sous-dossier</label>
+                <select id="home-folder-select">
+                    <option value="all">Toutes les matières (Mélange général)</option>
+                    <!-- Inscription dynamique des dossiers / sous-dossiers -->
+                </select>
+
+                <label for="mode-select">Mode de jeu</label>
+                <select id="mode-select">
+                    <option value="training">Mode Entraînement (Correction directe)</option>
+                    <option value="exam">Mode Examen (Correction à la fin)</option>
+                </select>
+
+                <button id="start-btn" class="pill-button">DÉMARRER LA SESSION</button>
+            </div>
+        </section>
+
+        <!-- ONGLET 2 : BIBLIOTHÈQUE (DOSSIERS, SOUS-DOSSIERS & ÉDITION) -->
+        <section id="tab-library" class="tab-content hidden">
+            <header class="top-nav">
+                <h1>Mes Dossiers</h1>
+            </header>
+
+            <div class="library-actions">
+                <button id="add-folder-btn" class="sub-nav-btn">+ Nouveau dossier</button>
+            </div>
+
+            <div id="folders-tree-container" class="folders-list">
+                <!-- Arborescence des dossiers & QCM -->
+            </div>
+        </section>
+
+        <!-- ONGLET 3 : AJOUT RAPIDE -->
+        <section id="tab-add" class="tab-content hidden">
+            <header class="top-nav">
+                <h1>Ajout Rapide</h1>
+            </header>
+
+            <div class="card setup-card">
+                <label for="add-folder-target">Ajouter dans :</label>
+                <select id="add-folder-target">
+                    <!-- Liste dynamique -->
+                </select>
+
+                <p class="syntax-help">
+                    Format par ligne :<br>
+                    <code>Question ; Item A ; Item B ; Item C ; Item D ; Item E ; Réponses</code>
+                </p>
+
+                <textarea id="bulk-input" rows="8" placeholder="L'os fémur est : ; Long ; Court ; Plat ; Inconstant ; Symétrique ; A,E&#10;La glycine : ; Acide aminé ; Amphotère ; C asymétrique ; La plus simple ; Aromatique ; A,B,D"></textarea>
+
+                <button id="save-bulk-btn" class="pill-button">AJOUTER LES QCM</button>
+            </div>
+        </section>
+
+        <!-- ONGLET 4 : PARAMÈTRES / EXPORT -->
+        <section id="tab-settings" class="tab-content hidden">
+            <header class="top-nav">
+                <h1>Paramètres</h1>
+            </header>
+
+            <div class="card setup-card">
+                <h3>Partage & Sauvegarde</h3>
+                <button id="export-btn" class="pill-button-secondary">📥 Exporter tous mes QCM (.json)</button>
+                
+                <label for="import-file-input" class="pill-button-secondary" style="text-align: center; cursor: pointer; display: block; box-sizing: border-box;">📤 Importer un fichier QCM</label>
+                <input type="file" id="import-file-input" accept=".json" style="display: none;">
+
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 15px 0;">
+
+                <h3>Réinitialisation</h3>
+                <button id="reset-stats-btn" class="danger-btn">Effacer l'historique des révisions</button>
+            </div>
+        </section>
+
+        <!-- ÉCRAN DU QUIZ (S'AFFICHE PAR-DESSUS LES ONGLETS) -->
+        <main id="quiz-screen" class="hidden">
+            <nav class="top-nav">
+                <button id="back-home-btn" class="nav-icon-btn">‹</button>
+                <div class="nav-titles">
+                    <h1 id="quiz-title">Quiz</h1>
+                    <span id="question-subtitle">Question 1 sur 10</span>
+                </div>
+                <div style="width: 24px;"></div>
+            </nav>
+
+            <div class="progress-section">
+                <div class="progress-track">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <span id="progress-percentage">0%</span>
+            </div>
+
+            <section class="card question-card">
+                <h2 id="question-text">Question...</h2>
+                <div id="items-container" class="items-container"></div>
+            </section>
+
+            <button id="action-btn" class="pill-button">VALIDER LA RÉPONSE</button>
+
+            <footer class="bottom-nav">
+                <button id="prev-btn" class="sub-nav-btn">‹ Précédent</button>
+                <div id="chrono">00:00</div>
+            </footer>
+        </main>
+
+        <!-- MODAL D'ÉDITION D'UN QCM -->
+        <div id="edit-modal" class="modal hidden">
+            <div class="modal-content card">
+                <h3>Modifier le QCM</h3>
+                <label>Question</label>
+                <input type="text" id="edit-q-text">
+                <label>Dossier</label>
+                <select id="edit-folder-select"></select>
+                <label>Item A</label><input type="text" id="edit-item-a">
+                <label>Item B</label><input type="text" id="edit-item-b">
+                <label>Item C</label><input type="text" id="edit-item-c">
+                <label>Item D</label><input type="text" id="edit-item-d">
+                <label>Item E</label><input type="text" id="edit-item-e">
+                <label>Réponses bonnes (ex: A,C,E)</label>
+                <input type="text" id="edit-answers">
+                
+                <div class="modal-actions">
+                    <button id="save-edit-btn" class="pill-button">Enregistrer</button>
+                    <button id="close-modal-btn" class="sub-nav-btn">Annuler</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB BAR EN BAS -->
+        <nav id="main-tab-bar" class="tab-bar">
+            <button class="tab-btn active" data-tab="tab-home">
+                <span class="tab-icon">🏠</span>
+                <span class="tab-label">Accueil</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-library">
+                <span class="tab-icon">📁</span>
+                <span class="tab-label">Dossiers</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-add">
+                <span class="tab-icon">⚡</span>
+                <span class="tab-label">Créer</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-settings">
+                <span class="tab-icon">⚙️</span>
+                <span class="tab-label">Réglages</span>
+            </button>
+        </nav>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
