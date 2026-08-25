@@ -3,192 +3,159 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>App QCM - Révisions</title>
+  <title>QCM Master</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- Barre supérieure / Navigation -->
-  <header class="app-header">
-    <div class="logo-title" onclick="app.showTab('dashboard')">
-      <span>📚</span> QCM Master
-    </div>
-    <div class="header-actions">
-      <button id="theme-toggle" class="btn-icon" title="Changer de thème">🌙</button>
-    </div>
-  </header>
+  <!-- Application Principale -->
+  <div id="main-app">
+    <header class="app-header">
+      <div class="logo-title" onclick="app.showTab('dashboard')">📚 QCM Master</div>
+      <button id="theme-toggle" class="btn-icon">🌙</button>
+    </header>
 
-  <!-- Navigation par Onglets -->
-  <nav class="app-nav">
-    <button class="nav-btn active" data-tab="dashboard">🏠 Accueil</button>
-    <button class="nav-btn" data-tab="create">➕ Ajouter / Importer</button>
-    <button class="nav-btn" data-tab="stats">📊 Statistiques</button>
-  </nav>
+    <nav class="app-nav">
+      <button class="nav-btn active" data-tab="dashboard">🏠 Accueil</button>
+      <button class="nav-btn" data-tab="create">➕ Ajouter</button>
+      <button class="nav-btn" data-tab="stats">📊 Stats</button>
+    </nav>
 
-  <main class="app-container">
+    <main class="app-container">
 
-    <!-- ================= 1. ACCUEIL & DOSSIERS ================= -->
-    <section id="tab-dashboard" class="tab-content active">
-      <div class="dashboard-banner">
-        <h2>Tableau de bord</h2>
-        <p>Prêt pour tes révisions du jour ?</p>
-        <div class="quick-stats-row">
-          <div class="stat-card">
-            <span class="stat-val" id="total-cards-count">0</span>
-            <span class="stat-lbl">QCM disponibles</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-val" id="global-success-rate">0%</span>
-            <span class="stat-lbl">Taux de réussite</span>
+      <!-- ACCUEIL -->
+      <section id="tab-dashboard" class="tab-content active">
+        <div class="dashboard-banner">
+          <h2>Tableau de bord</h2>
+          <div class="quick-stats-row">
+            <div class="stat-card">
+              <span class="stat-val" id="total-cards-count">0</span>
+              <span class="stat-lbl">QCM</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-val" id="global-success-rate">0%</span>
+              <span class="stat-lbl">Réussite</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Actions de révision globale -->
-      <div class="section-card">
-        <h3>🚀 Modes de Révision Rapide</h3>
-        <div class="modes-grid">
-          <button class="btn-mode mode-errors" onclick="app.startFilteredSession('errors')">
-            <span>🎯</span> Chasse aux erreurs (<50%)
-          </button>
-          <button class="btn-mode mode-spaced" onclick="app.startFilteredSession('spaced')">
-            <span>⏳</span> Vieilles séries (>7 jours)
-          </button>
-          <button class="btn-mode mode-starred" onclick="app.startFilteredSession('starred')">
-            <span>⭐</span> Questions favorites
-          </button>
+        <div class="section-card">
+          <h3>🚀 Modes Rapides</h3>
+          <div class="modes-grid">
+            <button class="btn-mode" onclick="app.startFilteredSession('errors')">🎯 Erreurs (<50%)</button>
+            <button class="btn-mode" onclick="app.startFilteredSession('spaced')">⏳ Vieilles séries (>7j)</button>
+            <button class="btn-mode" onclick="app.startFilteredSession('starred')">⭐ Favorites</button>
+          </div>
         </div>
-      </div>
 
-      <!-- Arborescence des dossiers -->
-      <div class="section-card">
-        <div class="section-header-inline">
-          <h3>📂 Mes Dossiers</h3>
-          <button class="btn-sm btn-primary" onclick="app.promptCreateFolder()">+ Nouveau dossier</button>
+        <div class="section-card">
+          <div class="section-header-inline">
+            <h3>📂 Dossiers</h3>
+            <button class="btn-sm btn-primary" onclick="app.promptCreateFolder()">+ Dossier</button>
+          </div>
+          <div id="tree-container" class="tree-view"></div>
         </div>
-        <div id="tree-container" class="tree-view">
-          <!-- Injecté dynamiquement par JS -->
-        </div>
-      </div>
-    </section>
+      </section>
 
-
-    <!-- ================= 2. CREATION ET IMPORTATION ================= -->
-    <section id="tab-create" class="tab-content">
-      <div class="section-card">
-        <h3>📥 Importer des QCM</h3>
-        <p class="help-text">Colle directement du texte JSON (généré par IA ou copié) ou importe un fichier <code>.json</code>.</p>
-        
-        <div class="import-area">
-          <textarea id="import-text" placeholder="Colle ton JSON ici..."></textarea>
-          <div class="import-actions">
-            <button class="btn-primary" onclick="app.importFromText()">Importer depuis le texte</button>
+      <!-- CREATION & IMPORT -->
+      <section id="tab-create" class="tab-content">
+        <div class="section-card">
+          <h3>📥 Importer des QCM</h3>
+          <p class="help-text">Colle ton JSON ou importe un fichier.</p>
+          <div class="import-area">
+            <textarea id="import-text" placeholder="Colle ton code JSON ici..."></textarea>
+            <button class="btn-primary" onclick="app.importFromText()">Importer le texte</button>
             <label class="btn-secondary file-input-label">
               📁 Choisir un fichier .json
               <input type="file" id="import-file" accept=".json" onchange="app.importFromFile(event)">
             </label>
           </div>
         </div>
-      </div>
 
-      <div class="section-card">
-        <h3>✏️ Ajouter un QCM manuellement</h3>
-        <form id="create-qcm-form" onsubmit="app.handleManualCreate(event)">
-          <div class="form-group">
-            <label>Dossier cible :</label>
-            <select id="create-folder-select" required></select>
-          </div>
-
-          <div class="form-group">
-            <label>Intitulé de la question :</label>
-            <textarea id="create-question" required placeholder="Ex: Quelle est la formule du..."></textarea>
-          </div>
-
-          <div class="form-group">
-            <label>Propositions d'options (Coche la ou les bonnes réponses) :</label>
-            <div id="options-builder">
-              <!-- Dynamique via JS -->
+        <div class="section-card">
+          <h3>✏️ Ajouter un QCM</h3>
+          <form id="create-qcm-form" onsubmit="app.handleManualCreate(event)">
+            <div class="form-group">
+              <label>Dossier :</label>
+              <select id="create-folder-select" required></select>
             </div>
-            <button type="button" class="btn-sm btn-secondary" onclick="app.addOptionInput()">+ Ajouter une option</button>
+            <div class="form-group">
+              <label>Question :</label>
+              <textarea id="create-question" required></textarea>
+            </div>
+            <div class="form-group">
+              <label>Propositions (Coche la/les bonnes) :</label>
+              <div id="options-builder"></div>
+              <button type="button" class="btn-sm btn-secondary" onclick="app.addOptionInput()">+ Option</button>
+            </div>
+            <div class="form-group">
+              <label>Explication (Optionnel) :</label>
+              <textarea id="create-explanation"></textarea>
+            </div>
+            <button type="submit" class="btn-primary">Enregistrer</button>
+          </form>
+        </div>
+
+        <div class="section-card">
+          <h3>📤 Exporter</h3>
+          <div class="export-buttons">
+            <button class="btn-secondary" onclick="app.exportData(false)">📦 Exporter Tout</button>
+            <button class="btn-secondary" onclick="app.exportData(true)">🤝 Exporter Sans Stats (Partage)</button>
           </div>
+        </div>
+      </section>
 
-          <div class="form-group">
-            <label>Explication (Optionnel) :</label>
-            <textarea id="create-explanation" placeholder="Explication détaillée du cours..."></textarea>
-          </div>
+      <!-- STATS -->
+      <section id="tab-stats" class="tab-content">
+        <div class="section-card">
+          <h3>📊 Statistiques détaillées</h3>
+          <div id="stats-details-list"></div>
+        </div>
+      </section>
 
-          <button type="submit" class="btn-primary">Enregistrer le QCM</button>
-        </form>
+    </main>
+  </div>
+
+  <!-- MODE REVISION (MASQUÉ PAR DÉFAUT) -->
+  <div id="quiz-overlay" class="quiz-overlay hidden">
+    <div class="quiz-header">
+      <button class="btn-sm btn-danger" onclick="app.quitQuiz()">❌ Quitter</button>
+      <div class="quiz-info-center">
+        <div id="quiz-title">Session</div>
+        <div id="quiz-progress">1/10</div>
+      </div>
+      <div class="quiz-timers">
+        <div id="timer-global" class="badge-timer">G: 00:00</div>
+        <div id="timer-question" class="badge-timer">Q: 00:00</div>
+      </div>
+    </div>
+
+    <div class="exam-grid-drawer">
+      <button class="btn-drawer-toggle" onclick="app.toggleExamGrid()">📋 Grille des questions</button>
+      <div id="exam-grid-container" class="exam-grid hidden"></div>
+    </div>
+
+    <div class="quiz-body">
+      <div class="question-box">
+        <button id="star-btn" class="star-btn" onclick="app.toggleCurrentStar()">⭐</button>
+        <p id="quiz-question-text" class="question-text"></p>
       </div>
 
-      <!-- Exportation -->
-      <div class="section-card">
-        <h3>📤 Exporter mes données</h3>
-        <p class="help-text">Télécharge tes cours pour les sauvegarder ou les partager à tes amis.</p>
-        <div class="export-buttons">
-          <button class="btn-secondary" onclick="app.exportData(false)">📦 Exporter TOUT (QCM + Mes stats)</button>
-          <button class="btn-secondary" onclick="app.exportData(true)">🤝 Exporter uniquement les QCM (Pour partager)</button>
-        </div>
+      <div id="quiz-options-container" class="quiz-options"></div>
+
+      <div id="quiz-explanation" class="explanation-box hidden">
+        <h4>💡 Explication :</h4>
+        <p id="quiz-explanation-text"></p>
       </div>
-    </section>
+    </div>
 
-
-    <!-- ================= 3. STATISTIQUES ================= -->
-    <section id="tab-stats" class="tab-content">
-      <div class="section-card">
-        <h3>📊 Statistiques détaillées</h3>
-        <div id="stats-details-list">
-          <!-- Injecté dynamiquement par JS -->
-        </div>
-      </div>
-    </section>
-
-
-    <!-- ================= 4. SESSION DE RÉVISION (MODAL / OVERLAY) ================= -->
-    <section id="tab-quiz" class="tab-content quiz-overlay">
-      <div class="quiz-header">
-        <button class="btn-sm btn-danger" onclick="app.quitQuiz()">❌ Quitter</button>
-        <div class="quiz-info">
-          <span id="quiz-title">Session</span>
-          <span id="quiz-progress">Question 1/10</span>
-        </div>
-        <div class="quiz-timers">
-          <div id="timer-global" class="badge-timer">Global: 00:00</div>
-          <div id="timer-question" class="badge-timer">Q: 00:00</div>
-        </div>
-      </div>
-
-      <!-- Panneau rétractable pour le Mode Examen (Grille de questions) -->
-      <div id="exam-grid-drawer" class="exam-grid-drawer">
-        <button class="btn-drawer-toggle" onclick="app.toggleExamGrid()">📋 Grille des questions</button>
-        <div id="exam-grid-container" class="exam-grid hidden"></div>
-      </div>
-
-      <div class="quiz-body">
-        <div class="question-box">
-          <button id="star-btn" class="star-btn" onclick="app.toggleCurrentStar()">⭐</button>
-          <p id="quiz-question-text" class="question-text"></p>
-        </div>
-
-        <div id="quiz-options-container" class="quiz-options">
-          <!-- Les options seront générées ici -->
-        </div>
-
-        <div id="quiz-explanation" class="explanation-box hidden">
-          <h4>💡 Explication :</h4>
-          <p id="quiz-explanation-text"></p>
-        </div>
-      </div>
-
-      <div class="quiz-footer">
-        <button id="btn-prev-q" class="btn-secondary" onclick="app.prevQuestion()">⬅️ Précédent</button>
-        <button id="btn-skip-q" class="btn-secondary" onclick="app.skipQuestion()">⏭️ Passer</button>
-        <button id="btn-validate-q" class="btn-primary" onclick="app.validateQuestion()">Valider</button>
-        <button id="btn-next-q" class="btn-primary hidden" onclick="app.nextQuestion()">Suivant ➡️</button>
-      </div>
-    </section>
-
-  </main>
+    <div class="quiz-footer">
+      <button id="btn-prev-q" class="btn-secondary" onclick="app.prevQuestion()">⬅️ Précédent</button>
+      <button id="btn-skip-q" class="btn-secondary" onclick="app.skipQuestion()">⏭️ Passer</button>
+      <button id="btn-validate-q" class="btn-primary" onclick="app.validateQuestion()">Valider</button>
+      <button id="btn-next-q" class="btn-primary hidden" onclick="app.nextQuestion()">Suivant ➡️</button>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
