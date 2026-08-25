@@ -1,552 +1,397 @@
-// Structure globale de données
-const DEFAULT_DATA = {
-  folders: [
-    { id: "root", name: "Général", parentId: null }
-  ],
-  questions: []
+// Base de données par défaut + chargement local
+let db_folders = [
+    { id: "f_ana", name: "Anatomie", parent: null },
+    { id: "f_bio", name: "Biochimie", parent: null },
+    { id: "f_osteo", name: "Ostéologie", parent: "f_ana" } // Sous-dossier exemple
+];
+
+let db_qcm = [];
+let sessionQuestions = [];
+let indexActuel = 0;
+let qcmActuel;
+let timerInterval;
+let tempsEcoule = 0;
+let modeActuel = 'training';
+let estValide = false;
+let editingQcmId = null;
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', () => {
+    chargerDonneesLocales();
+    initialiserNavigationTabs();
+    rafraichirTousLesSelects();
+    afficherArborescence();
+});
+
+function chargerDonneesLocales() {
+    const customFolders = localStorage.getItem('p1_folders');
+    const customQcm = localStorage.getItem('p1_qcm');
+
+    if (customFolders) db_folders = JSON.parse(customFolders);
+    if (customQcm) {
+        db_qcm = JSON.parse(customQcm);
+    } else {
+        // Charger le fichier JSON de base si vide
+        fetch('qcm.json')
+            .then(res => res.json())
+            .then(data => {
+                db_qcm = data;
+                sauvegarderTout();
+                afficherArborescence();
+            })
+            .catch(err => console.log("Pas de qcm.json trouvé."));
+    }
+}
+
+function sauvegarderTout() {
+    localStorage.setItem('p1_folders', JSON.stringify(db_folders));
+    localStorage.setItem('p1_qcm', JSON.stringify(db_qcm));
+    rafraichirTousLesSelects();
+    afficherArborescence();
+}
+
+// NAVIGATION TAB BAR
+function initialiserNavigationTabs() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+
+            btn.classList.add('active');
+            const target = btn.dataset.tab;
+            document.getElementById(target).classList.remove('hidden');
+        });
+    });
+
+    document.querySelectorAll('.theme-toggle').forEach(btn => {
+        btn.addEventListener('click', () => document.body.classList.toggle('dark-theme'));
+    });
+}
+
+// GENERATION DES DOSSIERS / SOUS-DOSSIERS
+function rafraichirTousLesSelects() {
+    const selects = ['home-folder-select', 'add-folder-target', 'edit-folder-select'];
+    
+    selects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        if(!select) return;
+        select.innerHTML = '';
+
+        if(selectId === 'home-folder-select') {
+            select.innerHTML = '<option value="all">Toutes les matières (Mélange général)</option>';
+        }
+
+        db_folders.filter(f => f.parent === null).forEach(parent => {
+            const opt = document.createElement('option');
+            opt.value = parent.id;
+            opt.textContent = parent.name;
+            select.appendChild(opt);
+
+            // Sous-dossiers
+            db_folders.filter(f => f.parent === parent.id).forEach(sub => {
+                const subOpt = document.createElement('option');
+                subOpt.value = sub.id;
+                subOpt.textContent = `└─ ${sub.name}`;
+                select.appendChild(subOpt);
+            });
+        });
+    });
+}
+
+// CREER UN DOSSIER / SOUS-DOSSIER
+document.getElementById('add-folder-btn').addEventListener('click', () => {
+    const nom = prompt("Nom du dossier :");
+    if (!nom) return;
+    
+    const isSub = confirm("Est-ce un sous-dossier ? (Annuler = Dossier principal)");
+    let parentId = null;
+
+    if (isSub) {
+        const parents = db_folders.filter(f => f.parent === null);
+        const choix = prompt("Numéro du dossier parent :\n" + parents.map((p, i) => `${i + 1}. ${p.name}`).join('\n'));
+        if (choix && parents[choix - 1]) parentId = parents[choix - 1].id;
+    }
+
+    const newFolder = { id: 'f_' + Date.now(), name: nom, parent: parentId };
+    db_folders.push(newFolder);
+    sauvegarderTout();
+});
+
+// SAISIE RAPIDE DE QCM
+document.getElementById('save-bulk-btn').addEventListener('click', () => {
+    const text = document.getElementById('bulk-input').value.trim();
+    const folderId = document.getElementById('add-folder-target').value;
+
+    if (!text) return;
+
+    const lines = text.split('\n');
+    let ajouts = 0;
+
+    lines.forEach((line, i) => {
+        const p = line.split(';').map(x => x.trim());
+        if (p.length >= 7) {
+            db_qcm.push({
+                id: Date.now() + i,
+                folderId: folderId,
+                question: p[0],
+                items: [
+                    { lettre: "A", texte: p[1] },
+                    { lettre: "B", texte: p[2] },
+                    { lettre: "C", texte: p[3] },
+                    { lettre: "D", texte: p[4] },
+                    { lettre: "E", texte: p[5] }
+                ],
+                reponses: p[6].toUpperCase().split(',').map(r => r.trim())
+            });
+            ajouts++;
+        }
+    });
+
+    if (ajouts > 0) {
+        sauvegarderTout();
+        document.getElementById('bulk-input').value = '';
+        alert(`${ajouts} QCM ajoutés !`);
+    } else {
+        alert("Erreur de format. Respectez : Question ; A ; B ; C ; D ; E ; Réponses");
+    }
+});
+
+// AFFICHER LA BIBLIOTHÈQUE ET PERMETTRE L'ÉDITION / SUPPRESSION
+function afficherArborescence() {
+    const container = document.getElementById('folders-tree-container');
+    container.innerHTML = '';
+
+    const parents = db_folders.filter(f => f.parent === null);
+
+    parents.forEach(p => {
+        const pDiv = document.createElement('div');
+        pDiv.className = 'folder-item card';
+        pDiv.innerHTML = `<div class="folder-header"><span>📁 ${p.name}</span></div>`;
+
+        // QCM directement sous le parent
+        imprimerQCMList(pDiv, p.id);
+
+        // Sous-dossiers
+        const subs = db_folders.filter(f => f.parent === p.id);
+        subs.forEach(s => {
+            const sDiv = document.createElement('div');
+            sDiv.className = 'subfolder-item';
+            sDiv.innerHTML = `<div class="subfolder-header">└─ 📂 ${s.name}</div>`;
+            imprimerQCMList(sDiv, s.id);
+            pDiv.appendChild(sDiv);
+        });
+
+        container.appendChild(pDiv);
+    });
+}
+
+function imprimerQCMList(parentEl, folderId) {
+    const qcms = db_qcm.filter(q => q.folderId === folderId);
+    qcms.forEach(q => {
+        const row = document.createElement('div');
+        row.className = 'qcm-row';
+        row.innerHTML = `
+            <span>${q.question.substring(0, 35)}...</span>
+            <div class="qcm-actions">
+                <span class="action-text" onclick="ouvrirEdition(${q.id})">Modifier</span>
+                <span class="action-delete" onclick="supprimerQCM(${q.id})">✕</span>
+            </div>
+        `;
+        parentEl.appendChild(row);
+    });
+}
+
+// SUPPRIMER ET MODIFIER
+window.supprimerQCM = function(id) {
+    if (confirm("Supprimer ce QCM ?")) {
+        db_qcm = db_qcm.filter(q => q.id !== id);
+        sauvegarderTout();
+    }
 };
 
-class App {
-  constructor() {
-    this.data = this.loadData();
-    this.currentQuiz = null;
-    this.globalTimer = null;
-    this.questionTimer = null;
-    this.initUI();
-  }
+window.ouvrirEdition = function(id) {
+    const q = db_qcm.find(item => item.id === id);
+    if (!q) return;
 
-  // --- Sauvegarde & Chargement ---
-  loadData() {
-    const local = localStorage.getItem("qcm_app_data");
-    return local ? JSON.parse(local) : DEFAULT_DATA;
-  }
+    editingQcmId = id;
+    document.getElementById('edit-q-text').value = q.question;
+    document.getElementById('edit-folder-select').value = q.folderId || '';
+    document.getElementById('edit-item-a').value = q.items[0]?.texte || '';
+    document.getElementById('edit-item-b').value = q.items[1]?.texte || '';
+    document.getElementById('edit-item-c').value = q.items[2]?.texte || '';
+    document.getElementById('edit-item-d').value = q.items[3]?.texte || '';
+    document.getElementById('edit-item-e').value = q.items[4]?.texte || '';
+    document.getElementById('edit-answers').value = q.reponses.join(',');
 
-  saveData() {
-    localStorage.setItem("qcm_app_data", JSON.stringify(this.data));
-    this.renderDashboard();
-  }
+    document.getElementById('edit-modal').classList.remove('hidden');
+};
 
-  // --- Initialisation UI ---
-  initUI() {
-    // Mode sombre
-    if (localStorage.getItem("dark_mode") === "true") {
-      document.body.classList.add("dark-mode");
+document.getElementById('close-modal-btn').addEventListener('click', () => {
+    document.getElementById('edit-modal').classList.add('hidden');
+});
+
+document.getElementById('save-edit-btn').addEventListener('click', () => {
+    const q = db_qcm.find(item => item.id === editingQcmId);
+    if (q) {
+        q.question = document.getElementById('edit-q-text').value;
+        q.folderId = document.getElementById('edit-folder-select').value;
+        q.items[0].texte = document.getElementById('edit-item-a').value;
+        q.items[1].texte = document.getElementById('edit-item-b').value;
+        q.items[2].texte = document.getElementById('edit-item-c').value;
+        q.items[3].texte = document.getElementById('edit-item-d').value;
+        q.items[4].texte = document.getElementById('edit-item-e').value;
+        q.reponses = document.getElementById('edit-answers').value.toUpperCase().split(',').map(x => x.trim());
+
+        sauvegarderTout();
+        document.getElementById('edit-modal').classList.add('hidden');
     }
-    document.getElementById("theme-toggle").addEventListener("click", () => {
-      document.body.classList.toggle("dark-mode");
-      localStorage.setItem("dark_mode", document.body.classList.contains("dark-mode"));
-    });
+});
 
-    // Onglets
-    document.querySelectorAll(".nav-btn").forEach(btn => {
-      btn.addEventListener("click", () => this.showTab(btn.dataset.tab));
-    });
+// LANCER LE QUIZ
+document.getElementById('start-btn').addEventListener('click', () => {
+    const folderId = document.getElementById('home-folder-select').value;
+    modeActuel = document.getElementById('mode-select').value;
 
-    this.renderDashboard();
-    this.initFormOptions();
-  }
-
-  showTab(tabId) {
-    document.querySelectorAll(".tab-content").forEach(tab => tab.classList.remove("active"));
-    document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
-    
-    document.getElementById(`tab-${tabId}`).classList.add("active");
-    const activeNav = document.querySelector(`.nav-btn[data-tab="${tabId}"]`);
-    if (activeNav) activeNav.classList.add("active");
-
-    if (tabId === "create") this.updateFolderSelects();
-    if (tabId === "stats") this.renderStats();
-  }
-
-  // --- Dashboard & Arborescence ---
-  renderDashboard() {
-    // Stats rapides
-    document.getElementById("total-cards-count").textContent = this.data.questions.length;
-    
-    let totalAttempts = 0;
-    let totalSuccess = 0;
-    this.data.questions.forEach(q => {
-      if (q.stats) {
-        totalAttempts += q.stats.attempts || 0;
-        totalSuccess += q.stats.success || 0;
-      }
-    });
-    const rate = totalAttempts > 0 ? Math.round((totalSuccess / totalAttempts) * 100) : 0;
-    document.getElementById("global-success-rate").textContent = `${rate}%`;
-
-    // Arborescence
-    const treeContainer = document.getElementById("tree-container");
-    treeContainer.innerHTML = "";
-    this.renderFolderTree(null, treeContainer);
-  }
-
-  renderFolderTree(parentId, containerElement) {
-    const folders = this.data.folders.filter(f => f.parentId === parentId);
-    
-    folders.forEach(folder => {
-      const folderQuestions = this.data.questions.filter(q => q.folderId === folder.id);
-      const node = document.createElement("div");
-      node.className = "tree-node";
-
-      const folderRow = document.createElement("div");
-      folderRow.className = "folder-row";
-      
-      const titleSpan = document.createElement("div");
-      titleSpan.className = "folder-title";
-      titleSpan.innerHTML = `<span>📂</span> <span>${folder.name}</span> <span class="folder-badge">${folderQuestions.length} QCM</span>`;
-      
-      // Toggle pliage
-      titleSpan.addEventListener("click", () => {
-        const children = node.querySelector(".folder-children");
-        if (children) children.classList.toggle("hidden");
-      });
-
-      const actionsDiv = document.createElement("div");
-      actionsDiv.className = "folder-actions";
-      
-      // Bouton lancer révision dossier
-      if (folderQuestions.length > 0) {
-        const playBtn = document.createElement("button");
-        playBtn.className = "btn-sm btn-primary";
-        playBtn.textContent = "▶️ Réviser";
-        playBtn.onclick = (e) => {
-          e.stopPropagation();
-          this.startQuizSession(folderQuestions, `Dossier: ${folder.name}`);
-        };
-        actionsDiv.appendChild(playBtn);
-      }
-
-      // Bouton options (+)
-      const addSubBtn = document.createElement("button");
-      addSubBtn.className = "btn-sm btn-secondary";
-      addSubBtn.textContent = "+ Sous-dossier";
-      addSubBtn.onclick = (e) => {
-        e.stopPropagation();
-        this.promptCreateFolder(folder.id);
-      };
-      actionsDiv.appendChild(addSubBtn);
-
-      // Bouton supprimer dossier (sauf root)
-      if (folder.id !== "root") {
-        const delBtn = document.createElement("button");
-        delBtn.className = "btn-sm btn-danger";
-        delBtn.textContent = "🗑️";
-        delBtn.onclick = (e) => {
-          e.stopPropagation();
-          this.deleteFolder(folder.id);
-        };
-        actionsDiv.appendChild(delBtn);
-      }
-
-      folderRow.appendChild(titleSpan);
-      folderRow.appendChild(actionsDiv);
-      node.appendChild(folderRow);
-
-      // Enfants
-      const childrenDiv = document.createElement("div");
-      childrenDiv.className = "folder-children";
-      this.renderFolderTree(folder.id, childrenDiv);
-      node.appendChild(childrenDiv);
-
-      containerElement.appendChild(node);
-    });
-  }
-
-  promptCreateFolder(parentId = null) {
-    const name = prompt("Nom du nouveau dossier :");
-    if (name) {
-      const newFolder = {
-        id: "folder_" + Date.now(),
-        name: name,
-        parentId: parentId
-      };
-      this.data.folders.push(newFolder);
-      this.saveData();
+    if (folderId === 'all') {
+        sessionQuestions = [...db_qcm];
+    } else {
+        // Inclure le dossier + ses sous-dossiers
+        const subIds = db_folders.filter(f => f.parent === folderId).map(f => f.id);
+        const targetIds = [folderId, ...subIds];
+        sessionQuestions = db_qcm.filter(q => targetIds.includes(q.folderId));
     }
-  }
 
-  deleteFolder(folderId) {
-    if (confirm("Supprimer ce dossier et déplacer ses QCM dans 'Général' ?")) {
-      this.data.folders = this.data.folders.filter(f => f.id !== folderId);
-      this.data.questions.forEach(q => {
-        if (q.folderId === folderId) q.folderId = "root";
-      });
-      this.saveData();
+    if (sessionQuestions.length === 0) {
+        alert("Aucun QCM dans cette sélection !");
+        return;
     }
-  }
 
-  // --- Création manuelle & Import ---
-  initFormOptions() {
-    const container = document.getElementById("options-builder");
-    container.innerHTML = "";
-    this.addOptionInput();
-    this.addOptionInput();
-  }
+    sessionQuestions.sort(() => Math.random() - 0.5);
+    indexActuel = 0;
 
-  addOptionInput() {
-    const container = document.getElementById("options-builder");
-    const div = document.createElement("div");
-    div.className = "option-input-row";
-    div.innerHTML = `
-      <input type="checkbox" class="option-correct-check">
-      <input type="text" placeholder="Texte de l'option" class="option-text-input" required>
-    `;
-    container.appendChild(div);
-  }
+    document.getElementById('main-tab-bar').classList.add('hidden');
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.getElementById('quiz-screen').classList.remove('hidden');
 
-  updateFolderSelects() {
-    const select = document.getElementById("create-folder-select");
-    select.innerHTML = "";
-    this.data.folders.forEach(f => {
-      const opt = document.createElement("option");
-      opt.value = f.id;
-      opt.textContent = f.name;
-      select.appendChild(opt);
-    });
-  }
+    chargerQuestion();
+    demarrerChrono();
+});
 
-  handleManualCreate(e) {
-    e.preventDefault();
-    const folderId = document.getElementById("create-folder-select").value;
-    const questionText = document.getElementById("create-question").value;
-    const explanationText = document.getElementById("create-explanation").value;
+document.getElementById('back-home-btn').addEventListener('click', () => {
+    arreterChrono();
+    document.getElementById('quiz-screen').classList.add('hidden');
+    document.getElementById('main-tab-bar').classList.remove('hidden');
+    document.getElementById('tab-home').classList.remove('hidden');
+});
 
-    const options = [];
-    document.querySelectorAll(".option-input-row").forEach(row => {
-      const text = row.querySelector(".option-text-input").value;
-      const isCorrect = row.querySelector(".option-correct-check").checked;
-      if (text) options.push({ text, isCorrect });
+function chargerQuestion() {
+    estValide = false;
+    qcmActuel = sessionQuestions[indexActuel];
+
+    document.getElementById('quiz-title').textContent = "Entraînement";
+    document.getElementById('question-subtitle').textContent = `Question ${indexActuel + 1} sur ${sessionQuestions.length}`;
+
+    const pourcent = Math.round(((indexActuel + 1) / sessionQuestions.length) * 100);
+    document.getElementById('progress-fill').style.width = `${pourcent}%`;
+    document.getElementById('progress-percentage').textContent = `${pourcent}%`;
+
+    document.getElementById('question-text').textContent = qcmActuel.question;
+
+    const container = document.getElementById('items-container');
+    container.innerHTML = '';
+
+    qcmActuel.items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.innerHTML = `<span class="item-letter">${item.lettre}</span><span>${item.texte}</span>`;
+        div.dataset.lettre = item.lettre;
+
+        div.addEventListener('click', () => {
+            if (!estValide) div.classList.toggle('selected');
+        });
+
+        container.appendChild(div);
     });
 
-    const newQCM = {
-      id: "q_" + Date.now(),
-      folderId,
-      question: questionText,
-      options,
-      explanation: explanationText,
-      starred: false,
-      lastRevised: null,
-      stats: { attempts: 0, success: 0 }
-    };
+    document.getElementById('action-btn').textContent = "VALIDER LA RÉPONSE";
+}
 
-    this.data.questions.push(newQCM);
-    this.saveData();
-    alert("QCM ajouté !");
-    document.getElementById("create-qcm-form").reset();
-    this.initFormOptions();
-  }
+document.getElementById('action-btn').addEventListener('click', () => {
+    if (!estValide) {
+        estValide = true;
+        const itemsDivs = document.querySelectorAll('.item');
+        let erreurs = 0;
 
-  importFromText() {
-    const text = document.getElementById("import-text").value;
-    try {
-      const json = JSON.parse(text);
-      this.processImport(json);
-    } catch (err) {
-      alert("Erreur de format JSON. Vérifie ton texte.");
+        itemsDivs.forEach(div => {
+            const lettre = div.dataset.lettre;
+            const estCoche = div.classList.contains('selected');
+            const estVrai = qcmActuel.reponses.includes(lettre);
+
+            if (modeActuel === 'training') {
+                if (estCoche && estVrai) div.classList.add('correct');
+                else if (estCoche && !estVrai) div.classList.add('incorrect');
+                else if (!estCoche && estVrai) div.classList.add('missed');
+            }
+
+            if (estCoche !== estVrai) erreurs++;
+        });
+
+        document.getElementById('action-btn').textContent = indexActuel < sessionQuestions.length - 1 ? "QUESTION SUIVANTE ›" : "TERMINER LA SESSION";
+    } else {
+        if (indexActuel < sessionQuestions.length - 1) {
+            indexActuel++;
+            chargerQuestion();
+        } else {
+            arreterChrono();
+            alert("Session terminée !");
+            document.getElementById('back-home-btn').click();
+        }
     }
-  }
+});
 
-  importFromFile(e) {
+// CHRONO & EXPORT / IMPORT
+function demarrerChrono() {
+    tempsEcoule = 0;
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        tempsEcoule++;
+        let m = Math.floor(tempsEcoule / 60).toString().padStart(2, '0');
+        let s = (tempsEcoule % 60).toString().padStart(2, '0');
+        document.getElementById('chrono').textContent = `${m}:${s}`;
+    }, 1000);
+}
+function arreterChrono() { clearInterval(timerInterval); }
+
+document.getElementById('export-btn').addEventListener('click', () => {
+    const data = { folders: db_folders, qcm: db_qcm };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `p1_qcm_export_${Date.now()}.json`;
+    a.click();
+});
+
+document.getElementById('import-file-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const json = JSON.parse(evt.target.result);
-        this.processImport(json);
-      } catch (err) {
-        alert("Erreur lors de la lecture du fichier JSON.");
-      }
+    reader.onload = (event) => {
+        try {
+            const imported = JSON.parse(event.target.result);
+            if (imported.folders && imported.qcm) {
+                db_folders = imported.folders;
+                db_qcm = imported.qcm;
+                sauvegarderTout();
+                alert("Importation réussie !");
+            }
+        } catch(err) { alert("Fichier invalide."); }
     };
     reader.readAsText(file);
-  }
+});
 
-  processImport(json) {
-    // Accepte un tableau de QCM ou un objet complet {folders, questions}
-    if (Array.isArray(json)) {
-      json.forEach(q => {
-        q.id = q.id || "q_" + Date.now() + Math.random();
-        q.folderId = q.folderId || "root";
-        q.stats = q.stats || { attempts: 0, success: 0 };
-        this.data.questions.push(q);
-      });
-    } else if (json.questions) {
-      if (json.folders) {
-        json.folders.forEach(f => {
-          if (!this.data.folders.find(existing => existing.id === f.id)) {
-            this.data.folders.push(f);
-          }
-        });
-      }
-      json.questions.forEach(q => this.data.questions.push(q));
+document.getElementById('reset-stats-btn').addEventListener('click', () => {
+    if (confirm("Réinitialiser l'historique ?")) {
+        localStorage.removeItem('p1_stats');
+        alert("Historique réinitialisé.");
     }
-    this.saveData();
-    alert("Importation réussie !");
-    document.getElementById("import-text").value = "";
-  }
-
-  // --- Exportation (Option 3 : Avec ou Sans stats) ---
-  exportData(stripStats = false) {
-    let exportObj = JSON.parse(JSON.stringify(this.data));
-    
-    if (stripStats) {
-      // Retirer les stats et dates personnelles pour le partage
-      exportObj.questions.forEach(q => {
-        delete q.stats;
-        delete q.lastRevised;
-        delete q.starred;
-      });
-    }
-
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj, null, 2));
-    const dlAnchor = document.createElement("a");
-    dlAnchor.setAttribute("href", dataStr);
-    dlAnchor.setAttribute("download", stripStats ? "qcm_export_partage.json" : "qcm_sauvegarde_complete.json");
-    document.body.appendChild(dlAnchor);
-    dlAnchor.click();
-    dlAnchor.remove();
-  }
-
-  // --- Sessions de révision filtrées ---
-  startFilteredSession(type) {
-    let list = [];
-    const now = Date.now();
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-
-    if (type === "errors") {
-      list = this.data.questions.filter(q => q.stats && q.stats.attempts > 0 && (q.stats.success / q.stats.attempts) < 0.5);
-    } else if (type === "spaced") {
-      list = this.data.questions.filter(q => !q.lastRevised || (now - q.lastRevised) > sevenDaysMs);
-    } else if (type === "starred") {
-      list = this.data.questions.filter(q => q.starred);
-    }
-
-    if (list.length === 0) {
-      alert("Aucune question ne correspond à ce critère pour le moment.");
-      return;
-    }
-
-    this.startQuizSession(list, `Révision : ${type}`);
-  }
-
-  // --- Moteur de Quiz & Mode Examen ---
-  startQuizSession(questionsList, title) {
-    this.currentQuiz = {
-      title,
-      questions: questionsList,
-      currentIndex: 0,
-      userAnswers: {},
-      startTime: Date.now(),
-      questionStartTime: Date.now()
-    };
-
-    document.getElementById("quiz-title").textContent = title;
-    this.showTab("quiz");
-    this.startTimers();
-    this.renderQuizQuestion();
-  }
-
-  startTimers() {
-    clearInterval(this.globalTimer);
-    clearInterval(this.questionTimer);
-
-    // Timer Global
-    this.globalTimer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - this.currentQuiz.startTime) / 1000);
-      const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-      const secs = String(elapsed % 60).padStart(2, '0');
-      document.getElementById("timer-global").textContent = `Global: ${mins}:${secs}`;
-    }, 1000);
-
-    // Timer Question (Minuteur indicatif 2 min)
-    this.resetQuestionTimer();
-  }
-
-  resetQuestionTimer() {
-    clearInterval(this.questionTimer);
-    this.currentQuiz.questionStartTime = Date.now();
-    const qTimerEl = document.getElementById("timer-question");
-    qTimerEl.classList.remove("overtime");
-
-    this.questionTimer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - this.currentQuiz.questionStartTime) / 1000);
-      if (elapsed <= 120) {
-        const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-        const secs = String(elapsed % 60).padStart(2, '0');
-        qTimerEl.textContent = `Q: ${mins}:${secs}`;
-      } else {
-        const overtime = elapsed - 120;
-        const mins = String(Math.floor(overtime / 60)).padStart(2, '0');
-        const secs = String(overtime % 60).padStart(2, '0');
-        qTimerEl.textContent = `Q: +${mins}:${secs}`;
-        qTimerEl.classList.add("overtime");
-      }
-    }, 1000);
-  }
-
-  renderQuizQuestion() {
-    const q = this.currentQuiz.questions[this.currentQuiz.currentIndex];
-    document.getElementById("quiz-progress").textContent = `Question ${this.currentQuiz.currentIndex + 1}/${this.currentQuiz.questions.length}`;
-    document.getElementById("quiz-question-text").textContent = q.question;
-    
-    // Star status
-    const starBtn = document.getElementById("star-btn");
-    starBtn.classList.toggle("active", !!q.starred);
-
-    // Options
-    const container = document.getElementById("quiz-options-container");
-    container.innerHTML = "";
-    
-    const selectedIndices = this.currentQuiz.userAnswers[this.currentQuiz.currentIndex] || [];
-
-    q.options.forEach((opt, idx) => {
-      const btn = document.createElement("button");
-      btn.className = "option-btn" + (selectedIndices.includes(idx) ? " selected" : "");
-      btn.textContent = opt.text;
-      btn.onclick = () => this.toggleOptionSelect(idx);
-      container.appendChild(btn);
-    });
-
-    document.getElementById("quiz-explanation").classList.add("hidden");
-    document.getElementById("btn-validate-q").classList.remove("hidden");
-    document.getElementById("btn-next-q").classList.add("hidden");
-
-    this.resetQuestionTimer();
-    this.renderExamGrid();
-  }
-
-  toggleOptionSelect(idx) {
-    let currentSel = this.currentQuiz.userAnswers[this.currentQuiz.currentIndex] || [];
-    if (currentSel.includes(idx)) {
-      currentSel = currentSel.filter(i => i !== idx);
-    } else {
-      currentSel.push(idx);
-    }
-    this.currentQuiz.userAnswers[this.currentQuiz.currentIndex] = currentSel;
-    this.renderQuizQuestion();
-  }
-
-  toggleCurrentStar() {
-    const q = this.currentQuiz.questions[this.currentQuiz.currentIndex];
-    q.starred = !q.starred;
-    this.saveData();
-    document.getElementById("star-btn").classList.toggle("active", q.starred);
-  }
-
-  validateQuestion() {
-    const q = this.currentQuiz.questions[this.currentQuiz.currentIndex];
-    const userSel = this.currentQuiz.userAnswers[this.currentQuiz.currentIndex] || [];
-
-    // Mettre à jour les stats
-    q.stats = q.stats || { attempts: 0, success: 0 };
-    q.stats.attempts++;
-    q.lastRevised = Date.now();
-
-    const correctIndices = q.options.map((opt, i) => opt.isCorrect ? i : null).filter(i => i !== null);
-    const isSuccess = JSON.stringify(userSel.sort()) === JSON.stringify(correctIndices.sort());
-
-    if (isSuccess) q.stats.success++;
-
-    // Colorer les options
-    const optionBtns = document.querySelectorAll(".option-btn");
-    q.options.forEach((opt, idx) => {
-      if (opt.isCorrect) optionBtns[idx].classList.add("correct");
-      if (userSel.includes(idx) && !opt.isCorrect) optionBtns[idx].classList.add("wrong");
-    });
-
-    if (q.explanation) {
-      document.getElementById("quiz-explanation-text").textContent = q.explanation;
-      document.getElementById("quiz-explanation").classList.remove("hidden");
-    }
-
-    document.getElementById("btn-validate-q").classList.add("hidden");
-    document.getElementById("btn-next-q").classList.remove("hidden");
-    this.saveData();
-  }
-
-  nextQuestion() {
-    if (this.currentQuiz.currentIndex < this.currentQuiz.questions.length - 1) {
-      this.currentQuiz.currentIndex++;
-      this.renderQuizQuestion();
-    } else {
-      alert("Session terminée ! Bravo !");
-      this.quitQuiz();
-    }
-  }
-
-  prevQuestion() {
-    if (this.currentQuiz.currentIndex > 0) {
-      this.currentQuiz.currentIndex--;
-      this.renderQuizQuestion();
-    }
-  }
-
-  skipQuestion() {
-    this.nextQuestion();
-  }
-
-  // Grille d'examen
-  toggleExamGrid() {
-    document.getElementById("exam-grid-container").classList.toggle("hidden");
-  }
-
-  renderExamGrid() {
-    const grid = document.getElementById("exam-grid-container");
-    grid.innerHTML = "";
-    this.currentQuiz.questions.forEach((_, idx) => {
-      const cell = document.createElement("div");
-      cell.className = "grid-cell";
-      if (idx === this.currentQuiz.currentIndex) cell.classList.add("current");
-      if (this.currentQuiz.userAnswers[idx] && this.currentQuiz.userAnswers[idx].length > 0) {
-        cell.classList.add("answered");
-      }
-      cell.textContent = idx + 1;
-      cell.onclick = () => {
-        this.currentQuiz.currentIndex = idx;
-        this.renderQuizQuestion();
-      };
-      grid.appendChild(cell);
-    });
-  }
-
-  quitQuiz() {
-    clearInterval(this.globalTimer);
-    clearInterval(this.questionTimer);
-    this.showTab("dashboard");
-  }
-
-  // --- Page Statistiques ---
-  renderStats() {
-    const container = document.getElementById("stats-details-list");
-    container.innerHTML = "";
-
-    this.data.questions.forEach(q => {
-      const attempts = q.stats ? q.stats.attempts : 0;
-      const success = q.stats ? q.stats.success : 0;
-      const rate = attempts > 0 ? Math.round((success / attempts) * 100) : 0;
-      
-      let dateStr = "Jamais révisé";
-      if (q.lastRevised) {
-        const days = Math.floor((Date.now() - q.lastRevised) / (1000 * 60 * 60 * 24));
-        dateStr = days === 0 ? "Aujourd'hui" : `Il y a ${days} jour(s)`;
-      }
-
-      const div = document.createElement("div");
-      div.className = "folder-row";
-      div.style.marginBottom = "8px";
-      div.innerHTML = `
-        <div>
-          <strong>${q.question.substring(0, 45)}...</strong>
-          <div style="font-size:0.8rem; color: var(--text-muted)">Dernière révision: ${dateStr}</div>
-        </div>
-        <div>
-          <span class="folder-badge" style="background: ${rate >= 50 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}">${rate}% succès (${success}/${attempts})</span>
-        </div>
-      `;
-      container.appendChild(div);
-    });
-  }
-}
-
-// Lancement de l'application
-const app = new App();
+});
